@@ -27,48 +27,79 @@ if 'user_reports' not in st.session_state:
     st.session_state.user_reports = pd.DataFrame(columns=['lat', 'lon', 'hazard', 'timestamp'])
 
 # ------------------------------------------------------------
-# CUSTOM PAGE STYLE (Polished Aesthetics)
+# CUSTOM PAGE STYLE (Interactive & Polished Aesthetics)
 # ------------------------------------------------------------
-# Defined custom colors for professionalism
 COLOR_PRIMARY = "#C2185B"    # ROSA Pink
 COLOR_BACKGROUND = "#212121" # Deep Charcoal
 COLOR_SECONDARY_BG = "#333333" # Dark Gray
 
 page_bg = f"""
 <style>
-/* 1. Global Backgrounds */
+/* 1. Global & Backgrounds */
 [data-testid="stAppViewContainer"] {{ background-color: {COLOR_BACKGROUND}; }}
 [data-testid="stHeader"] {{ background-color: rgba(0,0,0,0); }}
 
-/* 2. Headers and Branding */
+/* 2. Headers, Branding, and Sidebar */
 h1, h2, h3, h4, h5, h6 {{ color: {COLOR_PRIMARY} !important; font-family: 'Segoe UI', sans-serif; }}
-.st-emotion-cache-18ni7ap, .st-emotion-cache-79elbk {{ color: {COLOR_PRIMARY} !important; }}
-
-/* 3. Sidebar Styling */
-.st-emotion-cache-16s50s .st-emotion-cache-1wivap2 {{ background-color: {COLOR_SECONDARY_BG}; }}
 [data-testid="stSidebar"] {{ background-color: {COLOR_SECONDARY_BG}; border-right: 1px solid #444; }}
-.sidebar .sidebar-content {{ background-color: {COLOR_SECONDARY_BG} !important; }}
-[data-testid="stSidebarHeader"] h2 {{ color: white !important; }}
 
-/* 4. Button Styling */
+/* 3. General Widget and Input Hover Effect (NEW) */
+div.stSelectbox, div.stTextInput, div.stDateInput {{
+    border-radius: 8px;
+    transition: box-shadow 0.3s ease-in-out;
+}}
+div.stSelectbox:hover, div.stTextInput:hover {{
+    box-shadow: 0 0 10px rgba(194, 24, 91, 0.5); /* Pink Shadow/Glow on hover */
+}}
+
+/* 4. Button Styling (General) */
 .stButton>button {{ 
     background-color: {COLOR_PRIMARY}; 
     color: white; 
     border-radius: 8px; 
     padding: 0.5em 1em; 
     border: none; 
-    transition: background-color 0.2s;
+    transition: background-color 0.2s, box-shadow 0.3s;
 }}
-.stButton>button:hover {{ background-color: #9c1549; }}
+.stButton>button:hover {{ 
+    background-color: #9c1549; 
+    box-shadow: 0 4px 10px rgba(194, 24, 91, 0.4); /* Lift and Shadow */
+}}
 
-/* 5. Metric Styling (Ensure primary color is used for value) */
+/* 5. Map Container Shadow (NEW) */
+[data-testid="stDeck"] {{
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.5); 
+}}
+
+/* 6. SOS Button Glow (NEW) */
+.sos-button > button {{
+    box-shadow: 0 0 15px rgba(255, 0, 0, 0.7);
+    animation: pulse 1.5s infinite;
+}}
+@keyframes pulse {{
+    0% {{ box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7); }}
+    70% {{ box-shadow: 0 0 0 15px rgba(255, 0, 0, 0); }}
+    100% {{ box-shadow: 0 0 0 0 rgba(255, 0, 0, 0); }}
+}}
+
+/* 7. Info/Warning Box Lift Effect (NEW) */
+.stAlert {{ 
+    border-radius: 10px; 
+    border-left: 5px solid {COLOR_PRIMARY}; 
+    transition: transform 0.3s ease-in-out, box-shadow 0.3s;
+}}
+.stAlert:hover {{
+    transform: translateY(-3px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}}
+
+/* 8. Metric Styling */
 [data-testid="stMetricValue"] {{
     font-size: 2.5rem !important;
     font-weight: 700 !important;
 }}
-
-/* 6. Info/Warning Box Styling for better look */
-.stAlert {{ border-radius: 10px; border-left: 5px solid {COLOR_PRIMARY}; }}
 </style>
 """
 st.markdown(page_bg, unsafe_allow_html=True)
@@ -104,7 +135,6 @@ def load_safety_data():
         ]
         data = []
         
-        # Define base score ranges by POI type
         CONTEXT_SCORES = {
             "police_station":      {"reports": (1, 5),   "lighting": (4.5, 5.0), "cctv": (4.0, 5.0), "crowd": (3.5, 4.5), "rating": (4.0, 5.0)},
             "metro_station":       {"reports": (5, 12),  "lighting": (3.5, 4.5), "cctv": (3.0, 4.5), "crowd": (4.0, 5.0), "rating": (3.5, 4.5)},
@@ -301,7 +331,6 @@ def display_colored_metric(col, title, score, help_text):
     else: color = "#C2185B" # Red
     
     # Inject CSS to override the st.metric value color
-    # This must be done every time to apply the current color
     st.markdown(
         f"""
         <style>
@@ -315,7 +344,7 @@ def display_colored_metric(col, title, score, help_text):
     col.metric(title, f"{score}/100", delta_color="off", help=help_text)
 
 def simulate_safe_journey(shortest_coords, safest_coords, shortest_score, safest_score):
-    st.subheader("🚶 Journey Mode: ROSA is Guiding You")
+    st.subheader("Journey Mode: ROSA is Guiding You")
     
     coords_to_follow = safest_coords if safest_score >= shortest_score else shortest_coords
     total_steps = 100 
@@ -327,9 +356,8 @@ def simulate_safe_journey(shortest_coords, safest_coords, shortest_score, safest
     for i in range(total_steps + 1):
         if i == 50:
             with check_in_button_container:
-                # Type is now "primary"
-                if st.button("🚨 Safety Check-in: Tap to confirm you are safe", type="primary", key="check_in_btn"):
-                    st.toast("✅ Safety confirmed. Continuing route.")
+                if st.button("Safety Check-in: Tap to confirm you are safe", type="primary", key="check_in_btn"):
+                    st.toast("Safety confirmed. Continuing route.")
                     check_in_button_container.empty()
                     
         progress_bar.progress(i, text=f"Progress: {i}% complete.")
@@ -338,12 +366,12 @@ def simulate_safe_journey(shortest_coords, safest_coords, shortest_score, safest
             index = int((i/100) * (len(coords_to_follow) - 1))
             lat, lon = coords_to_follow[index]
             nearest = nearest_area(lat, lon) 
-            current_location_text.info(f"📍 Current Location Estimate (Simulated): Nearing **{nearest['area']}**")
+            current_location_text.info(f"Location Estimate (Simulated): Nearing **{nearest['area']}**")
         
         time.sleep(0.1) 
 
     progress_bar.empty()
-    current_location_text.success("✨ Journey Complete! You have arrived safely.")
+    current_location_text.success("Journey Complete! You have arrived safely.")
 
 
 # ------------------------------------------------------------
@@ -352,12 +380,8 @@ def simulate_safe_journey(shortest_coords, safest_coords, shortest_score, safest
 # Assuming your logo file is named 'rosa_logo.png' and is in the same directory as app.py
 logo_path = "rosa_logo.png"
 
-# Display the logo
-# You can adjust width as needed to fit your layout
+# Display the logo and title
 st.image(logo_path, width=250) 
-
-# You can optionally keep a subtle title or tagline below the logo if the logo itself doesn't contain the full name
-# st.markdown("### SafePath AI") 
 st.markdown("Empowering individuals through AI-driven safe travel insights and instant SOS assistance.")
 st.write(f"Current Time: **{datetime.now().strftime('%A, %d %B %Y | %I:%M %p')}**")
 
@@ -378,7 +402,7 @@ start_coords, end_coords = None, None
 if not city_areas:
     st.sidebar.warning("No areas found for this city. Please check your dataset.")
 else:
-    # Use columns in sidebar for a cleaner, packed look (NEW UI)
+    # Use columns in sidebar for a cleaner, packed look 
     col_start, col_end = st.sidebar.columns(2) 
     
     start_index = 0
@@ -399,8 +423,8 @@ else:
 
 st.sidebar.markdown("---")
 st.sidebar.header("Emergency Contact Setup")
-contact_name = st.sidebar.text_input("Contact Name", "Mom")
-contact_number = st.sidebar.text_input("Contact Number (e.g., +919876543210)", "+91XXXXXXXXXX")
+contact_name = st.sidebar.text_input("Contact Name", "Mom", help="Used for the WhatsApp link message.")
+contact_number = st.sidebar.text_input("Contact Number (e.g., +91XXXXXXXXXX)", "+91XXXXXXXXXX", help="Your trusted contact's number, used for the WhatsApp SOS link.")
 
 
 # ------------------------------------------------------------
@@ -417,7 +441,6 @@ if start_coords and end_coords:
     lon_min = min(c[1] for c in all_coords)
     lon_max = max(c[1] for c in all_coords)
     
-    # Use a dark, stylish map tile for professional look (NEW UI)
     m = folium.Map(location=start_coords, zoom_start=12, tiles="cartodbdarkmatter")
     m.fit_bounds([[lat_min, lon_min], [lat_max, lon_max]]) 
 
@@ -433,8 +456,8 @@ if start_coords and end_coords:
     if shortest_coords != safest_coords or safest_score < 90: 
         folium.PolyLine(
             shortest_coords, 
-            color="gray", 
-            weight=4, 
+            color="#888888", # Lighter gray for better visibility
+            weight=5, # Increased weight
             opacity=0.8, 
             tooltip=f"Shortest Route Score: {shortest_score}/100",
             dash_array='8, 8' 
@@ -452,12 +475,12 @@ if start_coords and end_coords:
 
     for _, row in safety_data.iterrows():
         
-        # Hazard Marker Highlight (Black warning icon for high risk)
+        # Hazard Marker Highlight (Visible on dark map)
         if row['reports'] > 15 and row['type'] in ['nightclub/bar', 'isolated_park']:
              folium.Marker(
                 location=[row['latitude'], row['longitude']],
                 tooltip=f"HIGH RISK: {row['area']} | Reports: {row['reports']}",
-                icon=folium.Icon(color='black', icon='fa-exclamation-triangle', prefix='fa')
+                icon=folium.Icon(color='orange', icon='fa-exclamation-triangle', prefix='fa') # Orange marker for visibility
             ).add_to(poi_cluster)
         else:
             # Standard POI Marker
@@ -476,18 +499,18 @@ if start_coords and end_coords:
     
     # 4. Score Comparison Display 
     st.markdown("---")
-    st.subheader("📊 Route Analysis & Recommendation")
+    st.subheader("Route Analysis & Recommendation")
     
-    # Display Dynamic Factors (NEW: Explicit AI factor display)
+    # Display Dynamic Factors (Text only)
     hour = datetime.now().hour
     if hour >= 0 and hour <= 5:
-        time_desc = "Night (00:00 - 05:00) 🌙"
+        time_desc = "Night (00:00 - 05:00)"
         risk_adj = "Increased risk due to low crowd density."
     elif hour >= 17 and hour <= 23:
-        time_desc = "Peak Evening (17:00 - 23:00) 🌆"
+        time_desc = "Peak Evening (17:00 - 23:00)"
         risk_adj = "Crowd factor adjusted to high activity levels."
     else:
-        time_desc = "Daytime (06:00 - 16:00) ☀️"
+        time_desc = "Daytime (06:00 - 16:00)"
         risk_adj = "Standard daylight assessment."
 
     st.markdown(f"**Current Context:** **{time_desc}** | *{risk_adj}*")
@@ -497,7 +520,7 @@ if start_coords and end_coords:
 
     col_shortest, col_safest, col_advice = st.columns([1, 1, 2])
     
-    # Use custom function for colored metrics (Polished)
+    # Use custom function for colored metrics 
     display_colored_metric(col_shortest, "Shortest Path Score (Grey Line)", shortest_score, "Score based on weighted averages of features along the route.")
     display_colored_metric(col_safest, "Safest Path Score (Red Line)", safest_score, "Score based on weighted averages of features along the route.")
 
@@ -506,16 +529,16 @@ if start_coords and end_coords:
         st.markdown(f"#### Overall Safety Advice (Time-Aware)")
         
         if safest_score > shortest_score + 5: 
-            st.success("✅ **Recommendation: Take the Safest Route (Red Line).** It avoids higher-risk zones and scores significantly better.")
+            st.success("Recommendation: Take the Safest Route (Red Line). It avoids higher-risk zones and scores significantly better.")
         elif shortest_score >= 80 and safest_score < shortest_score + 5:
-            st.info("👍 **Recommendation: Either route is good.** Both are rated relatively safe. You can choose the shorter path (Grey Line).")
+            st.info("Recommendation: Either route is good. Both are rated relatively safe. You can choose the shorter path (Grey Line).")
         else:
-            st.warning("⚠️ **Caution:** Both routes have areas of concern, especially given the current time.")
+            st.warning("Caution: Both routes have areas of concern, especially given the current time.")
 
     # ------------------------------------------------------------
     # USER FEEDBACK / REPORTING 
     # ------------------------------------------------------------
-    with st.expander("📢 Report a Local Hazard (User Feedback System)"):
+    with st.expander("Report a Local Hazard (User Feedback System)"):
         report_cols = st.columns([1, 1, 1])
         hazard = report_cols[0].selectbox("Hazard Type", ["Street Light Out", "Suspicious Activity", "Road Blockage", "Other Safety Concern"])
         
@@ -535,11 +558,11 @@ if start_coords and end_coords:
             else:
                 st.error("Please select a valid destination first.")
 
-        # Recalculate Button (NEW)
+        # Recalculate Button
         if not st.session_state.user_reports.empty:
             st.markdown("---")
-            st.warning("⚠️ New user reports detected. Rerun analysis to see score changes.")
-            if st.button("♻️ Rerun Route Analysis", key="rerun_analysis"):
+            st.warning("New user reports detected. Rerun analysis to see score changes.")
+            if st.button("Rerun Route Analysis", key="rerun_analysis"):
                 st.experimental_rerun() 
 
 
@@ -548,16 +571,18 @@ if start_coords and end_coords:
     # SOS SECTION 
     # ------------------------------------------------------------
     
-    if st.button("▶️ Start Safe Journey Simulation", help="Run the journey with timed check-ins."):
+    if st.button("Start Safe Journey Simulation", help="Run the journey with timed check-ins."):
         simulate_safe_journey(shortest_coords, safest_coords, shortest_score, safest_score)
         st.markdown("---") 
     
-    st.subheader("🚨 Emergency Assistance (SOS)")
+    st.subheader("Emergency Assistance (SOS)")
     
     col_sos, col_call = st.columns([1, 1])
 
     with col_sos:
-        if st.button("🔴 Send Instant SOS Alert Now", help="Sends a pre-filled WhatsApp message to your trusted contact and logs the alert."):
+        # Added custom CSS class for SOS button glow
+        st.markdown('<div class="sos-button">', unsafe_allow_html=True)
+        if st.button("Send Instant SOS Alert Now", help="Sends a pre-filled WhatsApp message to your trusted contact and logs the alert."):
             current_coords = get_current_location()
             current_location = f"Lat: {current_coords[0]:.4f}, Lon: {current_coords[1]:.4f}" if current_coords else "Unknown Location (IP estimate)"
             
@@ -573,28 +598,28 @@ if start_coords and end_coords:
                 help="Click to open WhatsApp and send the pre-filled alert."
             )
             st.info("Alert logged successfully.")
+        st.markdown('</div>', unsafe_allow_html=True) # Closing the custom div
     
     with col_call:
         st.markdown("##### Direct Emergency Call:")
         st.link_button(
-            "📞 Call National Emergency (112)", 
+            "Call National Emergency (112)", 
             "tel:112", 
             type="secondary", 
             help="Dial 112 for all emergencies in India."
         )
     
     st.markdown("---")
-    st.markdown("##### 🎤 Voice SOS Simulation")
+    st.markdown("##### Voice SOS Simulation")
     voice_trigger = st.text_input("Say 'EMERGENCY ROSA' (Type the phrase and hit Enter)", key="voice_sos")
 
     if voice_trigger.strip().upper() == "EMERGENCY ROSA":
-        st.error("⚠️ Voice Command Detected! Initiating SOS Protocol...")
+        st.error("Voice Command Detected! Initiating SOS Protocol...")
         current_coords = get_current_location()
         save_sos_alert(contact_name, contact_number, "Voice Triggered SOS", current_coords)
         whatsapp_msg = f"EMERGENCY! {contact_name}, Voice SOS Triggered! My location: {current_coords}. Track me!"
         whatsapp_link = f"https://wa.me/{contact_number.replace('+','').replace(' ','')}?text={whatsapp_msg.replace(' ','%20').replace(':','%3A').replace(',','%2C')}"
         st.link_button("1. Open WhatsApp (Voice Trigger)", whatsapp_link, type="primary")
-        st.balloons()
 
 
 else:
