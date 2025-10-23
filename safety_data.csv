@@ -1,0 +1,17 @@
+area,city,latitude,longitude,type,reports,lighting,cctv,crowd_density,user_rating
+Connaught Place,Delhi,28.6315,77.2167,metro_station,10,4.4,4.4,4.5,4.1
+India Gate,Delhi,28.6129,77.2295,isolated_park,12,1.3,2.3,2.3,2.7
+Saket Malls,Delhi,28.5245,77.206,nightclub/bar,22,3.1,3.0,3.7,2.9
+Dwarka Sector 12,Delhi,28.5876,77.046,police_station,2,4.7,4.1,4.2,4.3
+Lajpat Nagar Market,Delhi,28.5686,77.2439,metro_station,10,3.8,3.8,4.8,3.7
+Hauz Khas Village,Delhi,28.5494,77.2001,nightclub/bar,15,3.7,2.6,3.7,3.4
+Rajouri Garden,Delhi,28.6422,77.1174,metro_station,10,4.4,3.4,4.7,3.8
+Noida Sector 18,Noida,28.5707,77.326,nightclub/bar,17,3.2,1.9,3.3,2.7
+Noida Sector 62,Noida,28.6304,77.3733,police_station,1,4.7,5.0,4.1,4.8
+Gurgaon Cyber Hub,Gurgaon,28.4945,77.088,nightclub/bar,20,2.7,2.0,3.6,3.4
+DLF Phase 3,Gurgaon,28.4839,77.1015,metro_station,5,4.1,3.0,4.5,4.2
+Pari Chowk,Greater Noida,28.4744,77.503,metro_station,11,4.2,3.8,4.9,4.3
+Alpha 1 Park,Greater Noida,28.4702,77.5095,isolated_park,18,2.9,1.1,1.8,3.3
+Ghaziabad Raj Nagar,Ghaziabad,28.667,77.444,police_station,1,4.5,4.7,4.1,4.5
+Indirapuram,Ghaziabad,28.6437,77.3727,metro_station,6,3.6,3.4,4.0,3.9
+Kaushambi Bus Stop,Ghaziabad,28.643,77.3283,isolated_park,10,2.4,2.5,1.9,2.7
