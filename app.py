@@ -383,8 +383,22 @@ logo_path = "rosa_logo.png"
 # Display the logo and title
 st.image(logo_path, width=250) 
 st.markdown("Empowering individuals through AI-driven safe travel insights and instant SOS assistance.")
-st.write(f"Current Time: **{datetime.now().strftime('%A, %d %B %Y | %I:%M %p')}**")
+import pytz # Import the pytz library
 
+# --- Header Section ---
+# ... (Logo and tagline code) ...
+
+# 1. Get the current time in UTC
+utc_now = datetime.now(pytz.utc)
+
+# 2. Define the Indian Standard Time zone
+ist_timezone = pytz.timezone('Asia/Kolkata')
+
+# 3. Localize the UTC time to IST
+ist_now = utc_now.astimezone(ist_timezone)
+
+# 4. Display the localized time (IST)
+st.write(f"Current Time (IST): **{ist_now.strftime('%A, %d %B %Y | %I:%M %p')}**")
 # ------------------------------------------------------------
 # SIDEBAR INPUTS 
 # ------------------------------------------------------------
