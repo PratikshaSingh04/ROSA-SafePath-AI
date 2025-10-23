@@ -14,6 +14,7 @@ import random
 import numpy as np 
 from folium import features as f
 import time
+import pytz 
 
 # ------------------------------------------------------------
 # PAGE CONFIGURATION
@@ -21,17 +22,23 @@ import time
 st.set_page_config(page_title="ROSA – SafePath AI", layout="wide")
 
 # ------------------------------------------------------------
-# SESSION STATE INITIALIZATION (For User Reports)
+# SESSION STATE INITIALIZATION (Map Click State Added)
 # ------------------------------------------------------------
 if 'user_reports' not in st.session_state:
     st.session_state.user_reports = pd.DataFrame(columns=['lat', 'lon', 'hazard', 'timestamp'])
+if 'simulation_running' not in st.session_state:
+    st.session_state.simulation_running = False 
+if 'start_coords_click' not in st.session_state:
+    st.session_state['start_coords_click'] = None
+if 'end_coords_click' not in st.session_state:
+    st.session_state['end_coords_click'] = None
 
 # ------------------------------------------------------------
 # CUSTOM PAGE STYLE (Interactive & Polished Aesthetics)
 # ------------------------------------------------------------
-COLOR_PRIMARY = "#C2185B"    # ROSA Pink
-COLOR_BACKGROUND = "#212121" # Deep Charcoal
-COLOR_SECONDARY_BG = "#333333" # Dark Gray
+COLOR_PRIMARY = "#C2185B"
+COLOR_BACKGROUND = "#212121"
+COLOR_SECONDARY_BG = "#333333"
 
 page_bg = f"""
 <style>
@@ -42,14 +49,15 @@ page_bg = f"""
 /* 2. Headers, Branding, and Sidebar */
 h1, h2, h3, h4, h5, h6 {{ color: {COLOR_PRIMARY} !important; font-family: 'Segoe UI', sans-serif; }}
 [data-testid="stSidebar"] {{ background-color: {COLOR_SECONDARY_BG}; border-right: 1px solid #444; }}
+[data-testid="stSidebarHeader"] h2 {{ color: white !important; }}
 
-/* 3. General Widget and Input Hover Effect (NEW) */
+/* 3. Interactive Widget Hover Effect */
 div.stSelectbox, div.stTextInput, div.stDateInput {{
     border-radius: 8px;
     transition: box-shadow 0.3s ease-in-out;
 }}
 div.stSelectbox:hover, div.stTextInput:hover {{
-    box-shadow: 0 0 10px rgba(194, 24, 91, 0.5); /* Pink Shadow/Glow on hover */
+    box-shadow: 0 0 10px rgba(194, 24, 91, 0.5); 
 }}
 
 /* 4. Button Styling (General) */
@@ -63,17 +71,17 @@ div.stSelectbox:hover, div.stTextInput:hover {{
 }}
 .stButton>button:hover {{ 
     background-color: #9c1549; 
-    box-shadow: 0 4px 10px rgba(194, 24, 91, 0.4); /* Lift and Shadow */
+    box-shadow: 0 4px 10px rgba(194, 24, 91, 0.4); 
 }}
 
-/* 5. Map Container Shadow (NEW) */
+/* 5. Map Container Shadow */
 [data-testid="stDeck"] {{
     border-radius: 10px;
     overflow: hidden;
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.5); 
 }}
 
-/* 6. SOS Button Glow (NEW) */
+/* 6. SOS Button Glow (Pulse animation) */
 .sos-button > button {{
     box-shadow: 0 0 15px rgba(255, 0, 0, 0.7);
     animation: pulse 1.5s infinite;
@@ -84,7 +92,7 @@ div.stSelectbox:hover, div.stTextInput:hover {{
     100% {{ box-shadow: 0 0 0 0 rgba(255, 0, 0, 0); }}
 }}
 
-/* 7. Info/Warning Box Lift Effect (NEW) */
+/* 7. Info/Warning Box Lift Effect */
 .stAlert {{ 
     border-radius: 10px; 
     border-left: 5px solid {COLOR_PRIMARY}; 
@@ -344,34 +352,59 @@ def display_colored_metric(col, title, score, help_text):
     col.metric(title, f"{score}/100", delta_color="off", help=help_text)
 
 def simulate_safe_journey(shortest_coords, safest_coords, shortest_score, safest_score):
+    """
+    Simulates the user's journey, providing a dedicated tracking dashboard view.
+    NOTE: This is intentionally blocking for demonstration purposes.
+    """
     st.subheader("Journey Mode: ROSA is Guiding You")
+    
+    # 1. Dashboard Layout
+    col_progress, col_checkin = st.columns([3, 1])
     
     coords_to_follow = safest_coords if safest_score >= shortest_score else shortest_coords
     total_steps = 100 
     
-    progress_bar = st.progress(0, text="Starting journey...")
-    current_location_text = st.empty()
-    check_in_button_container = st.empty()
+    # Initialize components
+    with col_progress:
+        st.markdown("#### Route Progress")
+        progress_bar = st.progress(0, text="Journey initialization...")
+    with col_checkin:
+        st.markdown("#### Safety Status")
+        current_location_text = st.empty()
+        check_in_button_container = st.empty()
 
+    # 2. Simulation Loop
     for i in range(total_steps + 1):
+        
+        # Safety Check-in Trigger (50% mark)
         if i == 50:
             with check_in_button_container:
-                if st.button("Safety Check-in: Tap to confirm you are safe", type="primary", key="check_in_btn"):
+                if st.button("PROCEED: Confirm Safe", type="primary", key="check_in_dashboard"):
                     st.toast("Safety confirmed. Continuing route.")
                     check_in_button_container.empty()
                     
+        # Update progress bar text and value
         progress_bar.progress(i, text=f"Progress: {i}% complete.")
         
+        # Update Location Estimate (Every 10 steps)
         if i % 10 == 0 and i != 0:
             index = int((i/100) * (len(coords_to_follow) - 1))
             lat, lon = coords_to_follow[index]
             nearest = nearest_area(lat, lon) 
-            current_location_text.info(f"Location Estimate (Simulated): Nearing **{nearest['area']}**")
+            
+            with current_location_text.container():
+                st.markdown(f'<p style="color:#FFC107; font-weight:bold;">Nearing: {nearest["area"]}</p>', unsafe_allow_html=True)
+                st.markdown(f'<p style="font-size: small;">Risk Score: {calculate_route_safety_score([ (lat, lon) ])}/100</p>', unsafe_allow_html=True)
         
         time.sleep(0.1) 
 
+    # 3. Finalize Dashboard
     progress_bar.empty()
-    current_location_text.success("Journey Complete! You have arrived safely.")
+    st.success("Journey Complete! You have arrived safely.")
+    
+    # Revert state to exit simulation view
+    st.session_state.simulation_running = False
+    st.experimental_rerun()
 
 
 # ------------------------------------------------------------
@@ -383,11 +416,8 @@ logo_path = "rosa_logo.png"
 # Display the logo and title
 st.image(logo_path, width=250) 
 st.markdown("Empowering individuals through AI-driven safe travel insights and instant SOS assistance.")
-import pytz # Import the pytz library
 
-# --- Header Section ---
-# ... (Logo and tagline code) ...
-
+# --- Timezone Fix ---
 # 1. Get the current time in UTC
 utc_now = datetime.now(pytz.utc)
 
@@ -399,6 +429,7 @@ ist_now = utc_now.astimezone(ist_timezone)
 
 # 4. Display the localized time (IST)
 st.write(f"Current Time (IST): **{ist_now.strftime('%A, %d %B %Y | %I:%M %p')}**")
+
 # ------------------------------------------------------------
 # SIDEBAR INPUTS 
 # ------------------------------------------------------------
@@ -413,26 +444,50 @@ city_areas = safety_data[safety_data["city"] == city_choice]["area"].tolist()
 start_location, end_location = None, None
 start_coords, end_coords = None, None 
 
-if not city_areas:
-    st.sidebar.warning("No areas found for this city. Please check your dataset.")
-else:
-    # Use columns in sidebar for a cleaner, packed look 
-    col_start, col_end = st.sidebar.columns(2) 
-    
-    start_index = 0
-    end_index = 1 if len(city_areas) > 1 else 0
+# ------------------------------------------------------------
+# Clear map clicks button (NEW)
+def clear_map_clicks():
+    st.session_state['start_coords_click'] = None
+    st.session_state['end_coords_click'] = None
 
-    start_location = col_start.selectbox("Starting Point", city_areas, index=start_index)
-    end_location = col_end.selectbox("Destination", city_areas, index=end_index)
+if st.session_state.get('start_coords_click') or st.session_state.get('end_coords_click'):
+    st.sidebar.markdown("### Map Selection Active")
     
-    if start_location == end_location and len(city_areas) > 1:
-        st.sidebar.error("Start and Destination must be different!")
-        start_location = None
-        end_location = None
+    # Display coordinates if set
+    start_label = f"Start: {st.session_state['start_coords_click'][0]:.4f}, {st.session_state['start_coords_click'][1]:.4f}" if st.session_state['start_coords_click'] else "Start: (Click Map)"
+    end_label = f"End: {st.session_state['end_coords_click'][0]:.4f}, {st.session_state['end_coords_click'][1]:.4f}" if st.session_state['end_coords_click'] else "End: (Click Map)"
     
-    if start_location and end_location:
-        start_coords = get_coordinates(start_location)
-        end_coords = get_coordinates(end_location)
+    st.sidebar.info(f"Start: **{start_label}**\n\nDestination: **{end_label}**")
+    
+    if st.sidebar.button("Clear Map Selection"):
+        clear_map_clicks()
+        st.experimental_rerun()
+        
+    # Set coordinates from map clicks
+    start_coords = st.session_state['start_coords_click']
+    end_coords = st.session_state['end_coords_click']
+
+else:
+    # Use regular dropdown menus (Fallback)
+    if not city_areas:
+        st.sidebar.warning("No areas found for this city. Please check your dataset.")
+    else:
+        col_start, col_end = st.sidebar.columns(2) 
+        
+        start_index = 0
+        end_index = 1 if len(city_areas) > 1 else 0
+
+        start_location = col_start.selectbox("Starting Point", city_areas, index=start_index)
+        end_location = col_end.selectbox("Destination", city_areas, index=end_index)
+        
+        if start_location == end_location and len(city_areas) > 1:
+            st.sidebar.error("Start and Destination must be different!")
+            start_location = None
+            end_location = None
+        
+        if start_location and end_location:
+            start_coords = get_coordinates(start_location)
+            end_coords = get_coordinates(end_location)
 
 
 st.sidebar.markdown("---")
@@ -444,211 +499,261 @@ contact_number = st.sidebar.text_input("Contact Number (e.g., +91XXXXXXXXXX)", "
 # ------------------------------------------------------------
 # MAIN MAP + SAFETY SECTION
 # ------------------------------------------------------------
+
 if start_coords and end_coords:
     
     shortest_coords, safest_coords, shortest_score, safest_score = get_routes(start_coords, end_coords)
 
-    # Map setup
-    all_coords = shortest_coords + safest_coords
-    lat_min = min(c[0] for c in all_coords)
-    lat_max = max(c[0] for c in all_coords)
-    lon_min = min(c[1] for c in all_coords)
-    lon_max = max(c[1] for c in all_coords)
-    
-    m = folium.Map(location=start_coords, zoom_start=12, tiles="cartodbdarkmatter")
-    m.fit_bounds([[lat_min, lon_min], [lat_max, lon_max]]) 
-
-    # 2. Visualize Routes
-    folium.PolyLine(
-        safest_coords, 
-        color="#C2185B", 
-        weight=6, 
-        opacity=1.0, 
-        tooltip=f"Safest Route Score: {safest_score}/100"
-    ).add_to(m)
-    
-    if shortest_coords != safest_coords or safest_score < 90: 
-        folium.PolyLine(
-            shortest_coords, 
-            color="#888888", # Lighter gray for better visibility
-            weight=5, # Increased weight
-            opacity=0.8, 
-            tooltip=f"Shortest Route Score: {shortest_score}/100",
-            dash_array='8, 8' 
-        ).add_to(m)
-
-    # Markers
-    folium.Marker(start_coords, tooltip="Start", icon=folium.Icon(color="green", icon="fa-person-walking", prefix="fa")).add_to(m)
-    folium.Marker(end_coords, tooltip="Destination", icon=folium.Icon(color="darkred", icon="fa-flag", prefix="fa")).add_to(m)
-
-    # 3. Safety Data Visualization 
-    heat_data = [[row['latitude'], row['longitude'], row['reports'] * row['crowd_density'] / 5] for _, row in safety_data.iterrows()]
-    HeatMap(heat_data, radius=15, blur=10, max_zoom=12, name="Risk Heatmap").add_to(m)
-    
-    poi_cluster = MarkerCluster(name="Key POIs (Safety/Risk)").add_to(m)
-
-    for _, row in safety_data.iterrows():
+    # --- SIMULATION DASHBOARD VIEW ---
+    if st.session_state.simulation_running:
         
-        # Hazard Marker Highlight (Visible on dark map)
-        if row['reports'] > 15 and row['type'] in ['nightclub/bar', 'isolated_park']:
-             folium.Marker(
-                location=[row['latitude'], row['longitude']],
-                tooltip=f"HIGH RISK: {row['area']} | Reports: {row['reports']}",
-                icon=folium.Icon(color='orange', icon='fa-exclamation-triangle', prefix='fa') # Orange marker for visibility
-            ).add_to(poi_cluster)
-        else:
-            # Standard POI Marker
-            icon_color = "darkgreen" if row['type'] == 'police_station' else ("blue" if row['type'] == 'metro_station' else ("darkred" if row['type'] == 'nightclub/bar' else "orange"))
-            icon_name = "fa-shield-halved" if row['type'] == 'police_station' else ("fa-train-subway" if row['type'] == 'metro_station' else ("fa-bell-slash" if row['type'] == 'isolated_park' else "fa-martini-glass-citrus"))
-            
-            folium.Marker(
-                location=[row['latitude'], row['longitude']],
-                tooltip=f"{row['type'].title()}: {row['area']}<br>Reports: {row['reports']}",
-                icon=folium.Icon(color=icon_color, icon=icon_name, prefix='fa')
-            ).add_to(poi_cluster)
-
-    folium.LayerControl().add_to(m)
-
-    st_folium(m, width=800, height=500)
-    
-    # 4. Score Comparison Display 
-    st.markdown("---")
-    st.subheader("Route Analysis & Recommendation")
-    
-    # Display Dynamic Factors (Text only)
-    hour = datetime.now().hour
-    if hour >= 0 and hour <= 5:
-        time_desc = "Night (00:00 - 05:00)"
-        risk_adj = "Increased risk due to low crowd density."
-    elif hour >= 17 and hour <= 23:
-        time_desc = "Peak Evening (17:00 - 23:00)"
-        risk_adj = "Crowd factor adjusted to high activity levels."
-    else:
-        time_desc = "Daytime (06:00 - 16:00)"
-        risk_adj = "Standard daylight assessment."
-
-    st.markdown(f"**Current Context:** **{time_desc}** | *{risk_adj}*")
-    
-    avg_city_rating = safety_data[safety_data['city'] == city_choice]['user_rating'].mean()
-    st.info(f"City Average Safety Rating ({city_choice}): **{avg_city_rating:.1f}/5**")
-
-    col_shortest, col_safest, col_advice = st.columns([1, 1, 2])
-    
-    # Use custom function for colored metrics 
-    display_colored_metric(col_shortest, "Shortest Path Score (Grey Line)", shortest_score, "Score based on weighted averages of features along the route.")
-    display_colored_metric(col_safest, "Safest Path Score (Red Line)", safest_score, "Score based on weighted averages of features along the route.")
-
-    # 5. Final Recommendation and Advice
-    with col_advice:
-        st.markdown(f"#### Overall Safety Advice (Time-Aware)")
-        
-        if safest_score > shortest_score + 5: 
-            st.success("Recommendation: Take the Safest Route (Red Line). It avoids higher-risk zones and scores significantly better.")
-        elif shortest_score >= 80 and safest_score < shortest_score + 5:
-            st.info("Recommendation: Either route is good. Both are rated relatively safe. You can choose the shorter path (Grey Line).")
-        else:
-            st.warning("Caution: Both routes have areas of concern, especially given the current time.")
-
-    # ------------------------------------------------------------
-    # USER FEEDBACK / REPORTING 
-    # ------------------------------------------------------------
-    with st.expander("Report a Local Hazard (User Feedback System)"):
-        report_cols = st.columns([1, 1, 1])
-        hazard = report_cols[0].selectbox("Hazard Type", ["Street Light Out", "Suspicious Activity", "Road Blockage", "Other Safety Concern"])
-        
-        if report_cols[1].button("Report Hazard at Start Location", key="report_start"):
-            if start_coords:
-                new_report = pd.DataFrame([{'lat': start_coords[0], 'lon': start_coords[1], 'hazard': hazard, 'timestamp': datetime.now()}])
-                st.session_state.user_reports = pd.concat([st.session_state.user_reports, new_report], ignore_index=True)
-                st.success(f"Report logged near Start Location. Recalculate route to see safety score changes!")
-            else:
-                st.error("Please select a valid start location first.")
-
-        if report_cols[2].button("Report Hazard at Destination", key="report_end"):
-            if end_coords:
-                new_report = pd.DataFrame([{'lat': end_coords[0], 'lon': end_coords[1], 'hazard': hazard, 'timestamp': datetime.now()}])
-                st.session_state.user_reports = pd.concat([st.session_state.user_reports, new_report], ignore_index=True)
-                st.success(f"Report logged near Destination. Recalculate route to see safety score changes!")
-            else:
-                st.error("Please select a valid destination first.")
-
-        # Recalculate Button
-        if not st.session_state.user_reports.empty:
-            st.markdown("---")
-            st.warning("New user reports detected. Rerun analysis to see score changes.")
-            if st.button("Rerun Route Analysis", key="rerun_analysis"):
-                st.experimental_rerun() 
-
-
-    st.markdown("---")
-    # ------------------------------------------------------------
-    # SOS SECTION 
-    # ------------------------------------------------------------
-    
-    if st.button("Start Safe Journey Simulation", help="Run the journey with timed check-ins."):
+        st.markdown(f'<h2 style="color:{COLOR_PRIMARY};">Active Navigation Session</h2>', unsafe_allow_html=True)
         simulate_safe_journey(shortest_coords, safest_coords, shortest_score, safest_score)
-        st.markdown("---") 
-    
-    st.subheader("Emergency Assistance (SOS)")
-    
-    col_sos, col_call = st.columns([1, 1])
-
-    with col_sos:
-        # Added custom CSS class for SOS button glow
-        st.markdown('<div class="sos-button">', unsafe_allow_html=True)
-        if st.button("Send Instant SOS Alert Now", help="Sends a pre-filled WhatsApp message to your trusted contact and logs the alert."):
-            current_coords = get_current_location()
-            current_location = f"Lat: {current_coords[0]:.4f}, Lon: {current_coords[1]:.4f}" if current_coords else "Unknown Location (IP estimate)"
+        
+        if st.button("Stop Navigation & Return to Map", key="exit_sim_manual"):
+            st.session_state.simulation_running = False
+            st.experimental_rerun()
             
-            save_sos_alert(contact_name, contact_number, "Current Location", current_coords)
+    # --- DEFAULT ROUTING MAP VIEW (Map Click Logic Integrated) ---
+    else:
+        # Map setup
+        all_coords = shortest_coords + safest_coords
+        lat_min = min(c[0] for c in all_coords)
+        lat_max = max(c[0] for c in all_coords)
+        lon_min = min(c[1] for c in all_coords)
+        lon_max = max(c[1] for c in all_coords)
+        
+        # Initial Map View Center (if no clicks yet, use start)
+        map_center = start_coords
+        if st.session_state['start_coords_click']:
+             map_center = st.session_state['start_coords_click']
+        elif len(safety_data['latitude']) > 0:
+             map_center = (safety_data['latitude'].mean(), safety_data['longitude'].mean())
+
+
+        m = folium.Map(location=map_center, zoom_start=12, tiles="cartodbdarkmatter")
+        
+        # Only fit bounds if a route is calculated
+        if shortest_coords and len(shortest_coords) > 1:
+            m.fit_bounds([[lat_min, lon_min], [lat_max, lon_max]]) 
+        
+        # ------------------------------------------------
+        # 2. Visualize Routes (Draws only if valid coords exist)
+        # ------------------------------------------------
+        if start_coords and end_coords:
+            folium.PolyLine(
+                safest_coords, 
+                color="#C2185B", 
+                weight=6, 
+                opacity=1.0, 
+                tooltip=f"Safest Route Score: {safest_score}/100"
+            ).add_to(m)
             
-            whatsapp_msg = f"EMERGENCY! {contact_name}, I need help immediately. My current location is: {current_location}. Please track me!"
-            whatsapp_link = f"https://wa.me/{contact_number.replace('+','').replace(' ','')}?text={whatsapp_msg.replace(' ','%20').replace(':','%3A').replace(',','%2C')}"
+            if shortest_coords != safest_coords or safest_score < 90: 
+                folium.PolyLine(
+                    shortest_coords, 
+                    color="#888888", 
+                    weight=5, 
+                    opacity=0.8, 
+                    tooltip=f"Shortest Route Score: {shortest_score}/100",
+                    dash_array='8, 8' 
+                ).add_to(m)
+
+            # Markers (Route Points)
+            folium.Marker(start_coords, tooltip="Start", icon=folium.Icon(color="green", icon="fa-person-walking", prefix="fa")).add_to(m)
+            folium.Marker(end_coords, tooltip="Destination", icon=folium.Icon(color="darkred", icon="fa-flag", prefix="fa")).add_to(m)
+        
+        # ------------------------------------------------
+        # 3. Safety Data Visualization 
+        # ------------------------------------------------
+        heat_data = [[row['latitude'], row['longitude'], row['reports'] * row['crowd_density'] / 5] for _, row in safety_data.iterrows()]
+        HeatMap(heat_data, radius=15, blur=10, max_zoom=12, name="Risk Heatmap").add_to(m)
+        
+        poi_cluster = MarkerCluster(name="Key POIs (Safety/Risk)").add_to(m)
+
+        for _, row in safety_data.iterrows():
+            if row['reports'] > 15 and row['type'] in ['nightclub/bar', 'isolated_park']:
+                 folium.Marker(
+                    location=[row['latitude'], row['longitude']],
+                    tooltip=f"HIGH RISK: {row['area']} | Reports: {row['reports']}",
+                    icon=folium.Icon(color='orange', icon='fa-exclamation-triangle', prefix='fa') 
+                ).add_to(poi_cluster)
+            else:
+                icon_color = "darkgreen" if row['type'] == 'police_station' else ("blue" if row['type'] == 'metro_station' else ("darkred" if row['type'] == 'nightclub/bar' else "orange"))
+                icon_name = "fa-shield-halved" if row['type'] == 'police_station' else ("fa-train-subway" if row['type'] == 'metro_station' else ("fa-bell-slash" if row['type'] == 'isolated_park' else "fa-martini-glass-citrus"))
+                
+                folium.Marker(
+                    location=[row['latitude'], row['longitude']],
+                    tooltip=f"{row['type'].title()}: {row['area']}<br>Reports: {row['reports']}",
+                    icon=folium.Icon(color=icon_color, icon=icon_name, prefix='fa')
+                ).add_to(poi_cluster)
+
+        folium.LayerControl().add_to(m)
+        
+        # Add map click listener (NEW LOGIC)
+        st.markdown("#### Click the map to set Start and End Points", unsafe_allow_html=True)
+        st.markdown("*First click sets Start, second click sets Destination.*", unsafe_allow_html=True)
+        
+        map_data = st_folium(m, width=800, height=500, return_on_hover=False)
+
+        # Process map clicks (NEW LOGIC)
+        if map_data.get("last_clicked"):
+            lat, lon = map_data['last_clicked']['lat'], map_data['last_clicked']['lng']
             
-            st.link_button(
-                f"1. Open WhatsApp to Notify {contact_name}", 
-                whatsapp_link,
-                type="primary",
-                help="Click to open WhatsApp and send the pre-filled alert."
-            )
-            st.info("Alert logged successfully.")
-        st.markdown('</div>', unsafe_allow_html=True) # Closing the custom div
-    
-    with col_call:
-        st.markdown("##### Direct Emergency Call:")
-        st.link_button(
-            "Call National Emergency (112)", 
-            "tel:112", 
-            type="secondary", 
-            help="Dial 112 for all emergencies in India."
-        )
-    
-    st.markdown("---")
-    st.markdown("##### Voice SOS Simulation")
-    voice_trigger = st.text_input("Say 'EMERGENCY ROSA' (Type the phrase and hit Enter)", key="voice_sos")
+            if not st.session_state['start_coords_click']:
+                st.session_state['start_coords_click'] = (lat, lon)
+                st.experimental_rerun()
+            elif not st.session_state['end_coords_click']:
+                st.session_state['end_coords_click'] = (lat, lon)
+                st.experimental_rerun()
+            elif st.session_state['start_coords_click'] and st.session_state['end_coords_click']:
+                 # Clear and reset start if user clicks a third time
+                clear_map_clicks()
+                st.session_state['start_coords_click'] = (lat, lon)
+                st.info("Map points reset. New start point selected.")
+                st.experimental_rerun()
+        
+        st.markdown("---")
+        
+        # 4. Score Comparison Display (Only show if coordinates are set)
+        if start_coords and end_coords:
+            st.subheader("Route Analysis & Recommendation")
+            
+            # Display Dynamic Factors 
+            hour = ist_now.hour 
+            if hour >= 0 and hour <= 5:
+                time_desc = "Night (00:00 - 05:00)"
+                risk_adj = "Increased risk due to low crowd density."
+            elif hour >= 17 and hour <= 23:
+                time_desc = "Peak Evening (17:00 - 23:00)"
+                risk_adj = "Crowd factor adjusted to high activity levels."
+            else:
+                time_desc = "Daytime (06:00 - 16:00)"
+                risk_adj = "Standard daylight assessment."
 
-    if voice_trigger.strip().upper() == "EMERGENCY ROSA":
-        st.error("Voice Command Detected! Initiating SOS Protocol...")
-        current_coords = get_current_location()
-        save_sos_alert(contact_name, contact_number, "Voice Triggered SOS", current_coords)
-        whatsapp_msg = f"EMERGENCY! {contact_name}, Voice SOS Triggered! My location: {current_coords}. Track me!"
-        whatsapp_link = f"https://wa.me/{contact_number.replace('+','').replace(' ','')}?text={whatsapp_msg.replace(' ','%20').replace(':','%3A').replace(',','%2C')}"
-        st.link_button("1. Open WhatsApp (Voice Trigger)", whatsapp_link, type="primary")
+            st.markdown(f"**Current Context:** **{time_desc}** | *{risk_adj}*")
+            
+            avg_city_rating = safety_data[safety_data['city'] == city_choice]['user_rating'].mean()
+            st.info(f"City Average Safety Rating ({city_choice}): **{avg_city_rating:.1f}/5**")
 
+            col_shortest, col_safest, col_advice = st.columns([1, 1, 2])
+            
+            display_colored_metric(col_shortest, "Shortest Path Score (Grey Line)", shortest_score, "Score based on weighted averages of features along the route.")
+            display_colored_metric(col_safest, "Safest Path Score (Red Line)", safest_score, "Score based on weighted averages of features along the route.")
 
+            # 5. Final Recommendation and Advice
+            with col_advice:
+                st.markdown(f"#### Overall Safety Advice (Time-Aware)")
+                
+                if safest_score > shortest_score + 5: 
+                    st.success("Recommendation: Take the Safest Route (Red Line). It avoids higher-risk zones and scores significantly better.")
+                elif shortest_score >= 80 and safest_score < shortest_score + 5:
+                    st.info("Recommendation: Either route is good. Both are rated relatively safe. You can choose the shorter path (Grey Line).")
+                else:
+                    st.warning("Caution: Both routes have areas of concern, especially given the current time.")
+            
+            # Button logic to enter simulation mode
+            st.markdown("---")
+            st.subheader("Start Navigation")
+            
+            if st.button("Start Safe Journey Navigation", help="Launches the interactive journey mode."):
+                st.session_state.simulation_running = True
+                st.experimental_rerun()
+
+# End of Main if/else block
 else:
-    st.info("Enter both start and destination to view the route and safety score.")
+    st.info("Select start and destination points using the sidebar or by clicking the map.")
 
 # ------------------------------------------------------------
-# SOS LOG DISPLAY
+# USER FEEDBACK / REPORTING (ALWAYS VISIBLE)
 # ------------------------------------------------------------
+st.markdown("---")
+
+with st.expander("Report a Local Hazard (User Feedback System)"):
+    report_cols = st.columns([1, 1, 1])
+    hazard = report_cols[0].selectbox("Hazard Type", ["Street Light Out", "Suspicious Activity", "Road Blockage", "Other Safety Concern"])
+    
+    if report_cols[1].button("Report Hazard at Start Location", key="report_start"):
+        if start_coords:
+            new_report = pd.DataFrame([{'lat': start_coords[0], 'lon': start_coords[1], 'hazard': hazard, 'timestamp': datetime.now()}])
+            st.session_state.user_reports = pd.concat([st.session_state.user_reports, new_report], ignore_index=True)
+            st.success(f"Report logged near Start Location. Recalculate route to see safety score changes!")
+        else:
+            st.error("Please select a valid start location first.")
+
+    if report_cols[2].button("Report Hazard at Destination", key="report_end"):
+        if end_coords:
+            new_report = pd.DataFrame([{'lat': end_coords[0], 'lon': end_coords[1], 'hazard': hazard, 'timestamp': datetime.now()}])
+            st.session_state.user_reports = pd.concat([st.session_state.user_reports, new_report], ignore_index=True)
+            st.success(f"Report logged near Destination. Recalculate route to see safety score changes!")
+        else:
+            st.error("Please select a valid destination first.")
+
+    if not st.session_state.user_reports.empty:
+        st.markdown("---")
+        st.warning("New user reports detected. Rerun analysis to see score changes.")
+        if st.button("Rerun Route Analysis", key="rerun_analysis"):
+            st.experimental_rerun() 
+
+st.markdown("---")
+# ------------------------------------------------------------
+# SOS SECTION (Always visible)
+# ------------------------------------------------------------
+st.subheader("Emergency Assistance (SOS)")
+
+col_sos, col_call = st.columns([1, 1])
+
+with col_sos:
+    st.markdown('<div class="sos-button">', unsafe_allow_html=True)
+    if st.button("Send Instant SOS Alert Now", help="Sends a pre-filled WhatsApp message to your trusted contact and logs the alert."):
+        current_coords = get_current_location()
+        current_location = f"Lat: {current_coords[0]:.4f}, Lon: {current_coords[1]:.4f}" if current_coords else "Unknown Location (IP estimate)"
+        
+        save_sos_alert(contact_name, contact_number, "Current Location", current_coords)
+        
+        whatsapp_msg = f"EMERGENCY! {contact_name}, I need help immediately. My location: {current_location}. Please track me!"
+        whatsapp_link = f"https://wa.me/{contact_number.replace('+','').replace(' ','')}?text={whatsapp_msg.replace(' ','%20').replace(':','%3A').replace(',','%2C')}"
+        
+        st.link_button(
+            f"1. Open WhatsApp to Notify {contact_name}", 
+            whatsapp_link,
+            type="primary",
+            help="Click to open WhatsApp and send the pre-filled alert."
+        )
+        st.info("Alert logged successfully.")
+    st.markdown('</div>', unsafe_allow_html=True) 
+
+with col_call:
+    st.markdown("##### Direct Emergency Call:")
+    st.link_button(
+        "Call National Emergency (112)", 
+        "tel:112", 
+        type="secondary", 
+        help="Dial 112 for all emergencies in India."
+    )
+
+st.markdown("---")
+st.markdown("##### Voice SOS Simulation")
+voice_trigger = st.text_input("Say 'EMERGENCY ROSA' (Type the phrase and hit Enter)", key="voice_sos")
+
+if voice_trigger.strip().upper() == "EMERGENCY ROSA":
+    st.error("Voice Command Detected! Initiating SOS Protocol...")
+    current_coords = get_current_location()
+    save_sos_alert(contact_name, contact_number, "Voice Triggered SOS", current_coords)
+    whatsapp_msg = f"EMERGENCY! {contact_name}, Voice SOS Triggered! My location: {current_coords}. Track me!"
+    whatsapp_link = f"https://wa.me/{contact_number.replace('+','').replace(' ','')}?text={whatsapp_msg.replace(' ','%20').replace(':','%3A').replace(',','%2C')}"
+    st.link_button("1. Open WhatsApp (Voice Trigger)", whatsapp_link, type="primary")
+
+
+# ------------------------------------------------------------
+# LOGS AND ADDITIONAL SECTIONS (Always visible)
+# ------------------------------------------------------------
+st.markdown("---")
+
 if os.path.exists(SOS_FILE):
     st.markdown("#### Recent SOS Logs")
     st.dataframe(pd.read_csv(SOS_FILE).tail(5), hide_index=True)
 
-# ------------------------------------------------------------
-# ADDITIONAL SECTIONS
-# ------------------------------------------------------------
 st.markdown("---")
 
 with st.expander("About ROSA & Upcoming Features"):
