@@ -349,8 +349,16 @@ def simulate_safe_journey(shortest_coords, safest_coords, shortest_score, safest
 # ------------------------------------------------------------
 # HEADER
 # ------------------------------------------------------------
-st.title("ROSA – SafePath AI")
-st.markdown("Empowering women through AI-driven safe travel insights and instant SOS assistance.")
+# Assuming your logo file is named 'rosa_logo.png' and is in the same directory as app.py
+logo_path = "rosa_logo.png"
+
+# Display the logo
+# You can adjust width as needed to fit your layout
+st.image(logo_path, width=250) 
+
+# You can optionally keep a subtle title or tagline below the logo if the logo itself doesn't contain the full name
+# st.markdown("### SafePath AI") 
+st.markdown("Empowering individuals through AI-driven safe travel insights and instant SOS assistance.")
 st.write(f"Current Time: **{datetime.now().strftime('%A, %d %B %Y | %I:%M %p')}**")
 
 # ------------------------------------------------------------
