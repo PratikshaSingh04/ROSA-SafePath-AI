@@ -141,6 +141,11 @@ div.stSelectbox:hover, div.stTextInput:hover {{
     0% {{ transform: rotate(0deg); }}
     100% {{ transform: rotate(360deg); }}
 }}
+
+/* Risk Profile Sparkline Colors (2.1) */
+.risk-low {{ color: #4CAF50; }}
+.risk-medium {{ color: #FFC107; }}
+.risk-high {{ color: #C2185B; }}
 </style>
 """
 st.markdown(page_bg, unsafe_allow_html=True)
@@ -184,6 +189,8 @@ def load_safety_data():
         }
 
         for city, name, lat, lon, poi_type in areas:
+            scores = CONTEXT_SCORES.get(poi_type, CONTEXT_SCORES["metro_station"])
+
             data.append({
                 "area": name,
                 "city": city,
@@ -381,9 +388,9 @@ def save_sos_alert(name, number, location_text, coords):
         
 def display_colored_metric(col, title, score, help_text):
     """Displays st.metric with dynamically colored value based on safety score."""
-    if score >= 85: color = "#4CAF50"
-    elif score >= 70: color = "#FFC107"
-    else: color = "#C2185B"
+    if score >= 85: color = "#4CAF50" # Green
+    elif score >= 70: color = "#FFC107" # Yellow
+    else: color = "#C2185B" # Red
     
     st.markdown(
         f"""
@@ -538,30 +545,39 @@ contact_number = st.sidebar.text_input("Contact Number (e.g., +91XXXXXXXXXX)", "
 
 
 # ------------------------------------------------------------
-# MAIN MAP + SAFETY SECTION
+# MAIN MAP + SAFETY SECTION (FINAL REVISION)
 # ------------------------------------------------------------
 
-if start_coords and end_coords:
+# Determine the status of inputs
+can_calculate_route = start_coords and end_coords
+is_partially_set = st.session_state.get('start_coords_click') or st.session_state.get('end_coords_click')
+
+if can_calculate_route or is_partially_set:
     
-    # 1. Start Custom Loader (3.1)
-    loading_placeholder = st.empty()
-    
-    # Show loader if not in simulation mode
-    if not st.session_state.simulation_running:
-        with loading_placeholder.container():
-            st.markdown(
-                '<div class="loader-container"><div class="loader-spinner"></div><div class="loader-text">Analyzing routes and safety data...</div></div>', 
-                unsafe_allow_html=True
-            )
-    
-    # 1.1 Calculate Routes (This is the blocking step)
-    shortest_coords, safest_coords, shortest_score, safest_score = get_routes(start_coords, end_coords)
-    
-    # 1.2 Hide Loader after routes are calculated
-    loading_placeholder.empty()
+    # Only calculate routes if both points are valid
+    if can_calculate_route:
+        # 1. Start Custom Loader (3.1)
+        loading_placeholder = st.empty()
+        # Show loader if not in simulation mode
+        if not st.session_state.simulation_running:
+            with loading_placeholder.container():
+                st.markdown(
+                    '<div class="loader-container"><div class="loader-spinner"></div><div class="loader-text">Analyzing routes and safety data...</div></div>', 
+                    unsafe_allow_html=True
+                )
+        
+        # 1.1 Calculate Routes (This is the blocking step)
+        shortest_coords, safest_coords, shortest_score, safest_score = get_routes(start_coords, end_coords)
+        
+        # 1.2 Hide Loader after routes are calculated
+        loading_placeholder.empty()
+
+    else:
+        # Define placeholders for map rendering when inputs are partial/missing
+        shortest_coords, safest_coords, shortest_score, safest_score = [], [], 0, 0 
 
     # --- SIMULATION DASHBOARD VIEW ---
-    if st.session_state.simulation_running:
+    if st.session_state.simulation_running and can_calculate_route:
         
         st.markdown(f'<h2 style="color:{COLOR_PRIMARY};">Active Navigation Session</h2>', unsafe_allow_html=True)
         simulate_safe_journey(shortest_coords, safest_coords, shortest_score, safest_score)
@@ -570,55 +586,29 @@ if start_coords and end_coords:
             st.session_state.simulation_running = False
             st.rerun()
             
-    # --- DEFAULT ROUTING MAP VIEW (Map Click Logic Integrated) ---
+    # --- DEFAULT ROUTING MAP VIEW (Always Renders if inputs exist) ---
     else:
         # Map setup
-        all_coords = shortest_coords + safest_coords
-        lat_min = min(c[0] for c in all_coords)
-        lat_max = max(c[0] for c in all_coords)
-        lon_min = min(c[1] for c in all_coords)
-        lon_max = max(c[1] for c in all_coords)
+        all_coords = shortest_coords + safest_coords if can_calculate_route else []
         
-        map_center = start_coords
-        if st.session_state['start_coords_click']:
-             map_center = st.session_state['start_coords_click']
-        elif len(safety_data['latitude']) > 0:
-             map_center = (safety_data['latitude'].mean(), safety_data['longitude'].mean())
-
+        # Center the map correctly: Click Start > Dropdown Start > Mean
+        map_center = st.session_state['start_coords_click'] or start_coords or (safety_data['latitude'].mean(), safety_data['longitude'].mean())
 
         m = folium.Map(location=map_center, zoom_start=12, tiles="cartodbdarkmatter")
         
-        if shortest_coords and len(shortest_coords) > 1:
+        # Set bounds only if a full route is calculated
+        if can_calculate_route:
+            lat_min = min(c[0] for c in all_coords); lat_max = max(c[0] for c in all_coords)
+            lon_min = min(c[1] for c in all_coords); lon_max = max(c[1] for c in all_coords)
             m.fit_bounds([[lat_min, lon_min], [lat_max, lon_max]]) 
         
-        # 2. Visualize Routes 
-        if start_coords and end_coords:
-            folium.PolyLine(
-                safest_coords, 
-                color="#C2185B", 
-                weight=6, 
-                opacity=1.0, 
-                tooltip=f"Safest Route Score: {safest_score}/100"
-            ).add_to(m)
-            
-            if shortest_coords != safest_coords or safest_score < 90: 
-                folium.PolyLine(
-                    shortest_coords, 
-                    color="#888888", 
-                    weight=5, 
-                    opacity=0.8, 
-                    tooltip=f"Shortest Route Score: {shortest_score}/100",
-                    dash_array='8, 8' 
-                ).add_to(m)
-
-            # Markers
-            folium.Marker(start_coords, tooltip="Start", icon=folium.Icon(color="green", icon="fa-person-walking", prefix="fa")).add_to(m)
-            folium.Marker(end_coords, tooltip="Destination", icon=folium.Icon(color="darkred", icon="fa-flag", prefix="fa")).add_to(m)
+        # ------------------------------------------------
+        # 2. Visualize Routes & Temporary Markers
+        # ------------------------------------------------
         
-        # 3. Safety Data Visualization 
+        # Draw permanent POIs and Heatmap (always visible)
         heat_data = [[row['latitude'], row['longitude'], row['reports'] * row['crowd_density'] / 5] for _, row in safety_data.iterrows()]
         HeatMap(heat_data, radius=15, blur=10, max_zoom=12, name="Risk Heatmap").add_to(m)
-        
         poi_cluster = MarkerCluster(name="Key POIs (Safety/Risk)").add_to(m)
 
         for _, row in safety_data.iterrows():
@@ -637,7 +627,7 @@ if start_coords and end_coords:
                     tooltip=f"{row['type'].title()}: {row['area']}<br>Reports: {row['reports']}",
                     icon=folium.Icon(color=icon_color, icon=icon_name, prefix='fa')
                 ).add_to(poi_cluster)
-
+        
         # Draw persistent User Report Markers (2.2)
         if not st.session_state.user_reports.empty:
             for index, report in st.session_state.user_reports.iterrows():
@@ -647,6 +637,25 @@ if start_coords and end_coords:
                     icon=folium.Icon(color='red', icon='fa-exclamation', prefix='fa')
                 ).add_to(m)
 
+        # Draw temporary click markers (for visual feedback)
+        if st.session_state['start_coords_click']:
+            folium.Marker(st.session_state['start_coords_click'], tooltip="Start (1st Click)", icon=folium.Icon(color="blue", icon="fa-person-walking", prefix="fa")).add_to(m)
+        if st.session_state['end_coords_click']:
+            folium.Marker(st.session_state['end_coords_click'], tooltip="Destination (2nd Click)", icon=folium.Icon(color="purple", icon="fa-flag", prefix="fa")).add_to(m)
+
+
+        # Draw Routes ONLY IF CALCULATED
+        if can_calculate_route: 
+            folium.PolyLine(
+                safest_coords, color="#C2185B", weight=6, opacity=1.0, tooltip=f"Safest Route Score: {safest_score}/100"
+            ).add_to(m)
+            if shortest_coords != safest_coords or safest_score < 90: 
+                folium.PolyLine(
+                    shortest_coords, color="#888888", weight=5, opacity=0.8, tooltip=f"Shortest Route Score: {shortest_score}/100", dash_array='8, 8' 
+                ).add_to(m)
+            # Final Markers (Use route markers over click markers if route is calculated)
+            folium.Marker(start_coords, tooltip="Start", icon=folium.Icon(color="green", icon="fa-person-walking", prefix="fa")).add_to(m)
+            folium.Marker(end_coords, tooltip="Destination", icon=folium.Icon(color="darkred", icon="fa-flag", prefix="fa")).add_to(m)
 
         folium.LayerControl().add_to(m)
         
@@ -656,7 +665,7 @@ if start_coords and end_coords:
         
         map_data = st_folium(m, width=800, height=500, return_on_hover=False)
 
-        # Process map clicks (NEW LOGIC)
+        # Process map clicks
         if map_data.get("last_clicked"):
             lat, lon = map_data['last_clicked']['lat'], map_data['last_clicked']['lng']
             
@@ -671,14 +680,13 @@ if start_coords and end_coords:
                 st.session_state['start_coords_click'] = (lat, lon)
                 st.info("Map points reset. New start point selected.")
                 st.rerun()
-
+        
         st.markdown("---")
         
-        # 4. Score Comparison Display (Only show if coordinates are set)
-        if start_coords and end_coords:
+        # 4. Analysis and Buttons (Only display if a full route can be calculated)
+        if can_calculate_route:
             
             # --- Dynamic Factor Display (2.3) ---
-            
             hour = ist_now.hour
             if hour >= 0 and hour <= 5:
                 time_desc = "Night (00:00 - 05:00)"
@@ -737,7 +745,7 @@ if start_coords and end_coords:
                 st.session_state.simulation_running = True
                 st.rerun()
 
-# End of Main if/else block
+# Final Catch-All (Only runs if no inputs are provided at all)
 else:
     st.info("Select start and destination points using the sidebar or by clicking the map.")
 
@@ -770,7 +778,7 @@ with st.expander("Report a Local Hazard (User Feedback System)"):
         st.markdown("---")
         st.warning("New user reports detected. Rerun analysis to see score changes.")
         if st.button("Rerun Route Analysis", key="rerun_analysis"):
-            st.rerun()
+            st.rerun() 
 
 st.markdown("---")
 # ------------------------------------------------------------
