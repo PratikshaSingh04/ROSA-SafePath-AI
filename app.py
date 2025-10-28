@@ -219,7 +219,7 @@ safety_data = load_safety_data()
 # ------------------------------------------------------------
 
 def get_coordinates(place):
-    """(3.2) Robust Geocoding with City Center Fallback"""
+    """(3.2) Robust Geocoding with City Center Fallback (Used only for map clicks)"""
     global city_choice 
     geolocator = Nominatim(user_agent="safe_path_ai")
     
@@ -229,16 +229,16 @@ def get_coordinates(place):
         if location:
             return (location.latitude, location.longitude)
     except:
-        pass # Geocoding failed
+        pass 
 
     # Fallback to City Center (3.2)
     try:
         city_location = geolocator.geocode(city_choice, timeout=10)
         if city_location:
-            st.sidebar.warning(f"Failed to locate '{place}'. Using approximate center of {city_choice}.")
+            st.sidebar.warning(f"Failed to locate clicked point. Using approximate center of {city_choice}.")
             return (city_location.latitude, city_location.longitude)
     except:
-        pass # City geocoding failed
+        pass 
 
     # Absolute Fallback (if the city itself fails)
     st.sidebar.error("Geocoding failed entirely. Cannot set location.")
@@ -334,7 +334,7 @@ def get_safe_route(G, orig_node, dest_node):
 
     return nx.shortest_path(G, orig_node, dest_node, weight='safety_cost')
 
-@st.cache_data(show_spinner=False) # Spinner handled by custom HTML/CSS loader
+@st.cache_data(show_spinner=False)
 def get_routes(start_coords, end_coords):
     try:
         for radius in [3000, 8000, 15000, 25000]:
@@ -388,9 +388,9 @@ def save_sos_alert(name, number, location_text, coords):
         
 def display_colored_metric(col, title, score, help_text):
     """Displays st.metric with dynamically colored value based on safety score."""
-    if score >= 85: color = "#4CAF50" # Green
-    elif score >= 70: color = "#FFC107" # Yellow
-    else: color = "#C2185B" # Red
+    if score >= 85: color = "#4CAF50"
+    elif score >= 70: color = "#FFC107"
+    else: color = "#C2185B"
     
     st.markdown(
         f"""
@@ -404,7 +404,6 @@ def display_colored_metric(col, title, score, help_text):
     )
     col.metric(title, f"{score}/100", delta_color="off", help=help_text)
 
-# NEW: Risk Profile Visualization Helper (2.1)
 def get_risk_profile_sparkline(route_coords):
     """Calculates granular risk segments and generates a color-coded sparkline."""
     
@@ -534,8 +533,17 @@ else:
             end_location = None
         
         if start_location and end_location:
-            start_coords = get_coordinates(start_location)
-            end_coords = get_coordinates(end_location)
+            
+            # --- FIX: BYPASS NOMINATIM FOR KNOWN LOCATIONS ---
+            def get_coords_from_data(location_name):
+                row = safety_data[safety_data['area'] == location_name].iloc[0]
+                return (row['latitude'], row['longitude'])
+
+            try:
+                start_coords = get_coords_from_data(start_location)
+                end_coords = get_coords_from_data(end_location)
+            except Exception as e:
+                st.sidebar.error("Data integrity error. Cannot locate area in dataset.")
 
 
 st.sidebar.markdown("---")
@@ -627,7 +635,7 @@ if can_calculate_route or is_partially_set:
                     tooltip=f"{row['type'].title()}: {row['area']}<br>Reports: {row['reports']}",
                     icon=folium.Icon(color=icon_color, icon=icon_name, prefix='fa')
                 ).add_to(poi_cluster)
-        
+
         # Draw persistent User Report Markers (2.2)
         if not st.session_state.user_reports.empty:
             for index, report in st.session_state.user_reports.iterrows():
@@ -637,10 +645,10 @@ if can_calculate_route or is_partially_set:
                     icon=folium.Icon(color='red', icon='fa-exclamation', prefix='fa')
                 ).add_to(m)
 
-        # Draw temporary click markers (for visual feedback)
-        if st.session_state['start_coords_click']:
+        # Draw temporary click markers
+        if st.session_state['start_coords_click'] and not can_calculate_route:
             folium.Marker(st.session_state['start_coords_click'], tooltip="Start (1st Click)", icon=folium.Icon(color="blue", icon="fa-person-walking", prefix="fa")).add_to(m)
-        if st.session_state['end_coords_click']:
+        if st.session_state['end_coords_click'] and not can_calculate_route:
             folium.Marker(st.session_state['end_coords_click'], tooltip="Destination (2nd Click)", icon=folium.Icon(color="purple", icon="fa-flag", prefix="fa")).add_to(m)
 
 
@@ -656,6 +664,7 @@ if can_calculate_route or is_partially_set:
             # Final Markers (Use route markers over click markers if route is calculated)
             folium.Marker(start_coords, tooltip="Start", icon=folium.Icon(color="green", icon="fa-person-walking", prefix="fa")).add_to(m)
             folium.Marker(end_coords, tooltip="Destination", icon=folium.Icon(color="darkred", icon="fa-flag", prefix="fa")).add_to(m)
+
 
         folium.LayerControl().add_to(m)
         
