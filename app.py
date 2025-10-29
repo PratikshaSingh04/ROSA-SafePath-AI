@@ -793,7 +793,7 @@ if can_calculate_route or is_partially_set:
                 # --- TRANSPORT SUGGESTION (NEW BLOCK) ---
                 st.markdown("---")
                 transport_suggestion, transport_reason = suggest_transport(safest_score, ist_now.hour)
-                st.markdown(f"#### 🚌 Suggested Mode of Transport: **{transport_suggestion}**")
+                st.markdown(f"#### Suggested Mode of Transport: **{transport_suggestion}**")
                 st.markdown(f'<p style="color:#FFC107; font-size: small;">*Reasoning: {transport_reason}*</p>', unsafe_allow_html=True)
                 # ----------------------------------------
             
