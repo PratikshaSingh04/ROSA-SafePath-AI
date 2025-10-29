@@ -15,6 +15,7 @@ import numpy as np
 from folium import features as f
 import time
 import pytz 
+from scipy.spatial import KDTree # NEW: For fast nearest neighbor lookup
 
 # ------------------------------------------------------------
 # PAGE CONFIGURATION
@@ -32,6 +33,9 @@ if 'start_coords_click' not in st.session_state:
     st.session_state['start_coords_click'] = None
 if 'end_coords_click' not in st.session_state:
     st.session_state['end_coords_click'] = None
+
+# Global KDTree variable (will be initialized after data load)
+safety_kdtree = None
 
 # ------------------------------------------------------------
 # CUSTOM PAGE STYLE (Includes Custom Loader CSS)
@@ -151,32 +155,24 @@ div.stSelectbox:hover, div.stTextInput:hover {{
 st.markdown(page_bg, unsafe_allow_html=True)
 
 # ------------------------------------------------------------
-# LOAD OR GENERATE SAFETY DATA 
+# LOAD OR GENERATE SAFETY DATA (MASSIVE EXPANSION)
 # ------------------------------------------------------------
 @st.cache_data 
 def load_safety_data():
     path = "safety_data.csv"
     if not os.path.exists(path):
-        areas = [
+        
+        # Base POI locations (used as anchors for generating 150 points)
+        base_areas = [
              ("Delhi", "Connaught Place", 28.6315, 77.2167, "metro_station"), 
              ("Delhi", "India Gate", 28.6129, 77.2295, "isolated_park"),
              ("Delhi", "Saket Malls", 28.5245, 77.2060, "nightclub/bar"),
              ("Delhi", "Dwarka Sector 12", 28.5876, 77.0460, "police_station"),
-             ("Delhi", "Lajpat Nagar Market", 28.5686, 77.2439, "metro_station"),
-             ("Delhi", "Hauz Khas Village", 28.5494, 77.2001, "nightclub/bar"),
              ("Delhi", "Rajouri Garden", 28.6422, 77.1174, "metro_station"),
-             
              ("Noida", "Noida Sector 18", 28.5707, 77.3260, "nightclub/bar"), 
              ("Noida", "Noida Sector 62", 28.6304, 77.3733, "police_station"),
-             
              ("Gurgaon", "Gurgaon Cyber Hub", 28.4945, 77.0880, "nightclub/bar"), 
-             ("Gurgaon", "DLF Phase 3", 28.4839, 77.1015, "metro_station"),
-             
-             ("Greater Noida", "Pari Chowk", 28.4744, 77.5030, "metro_station"), 
-             ("Greater Noida", "Alpha 1 Park", 28.4702, 77.5095, "isolated_park"),
-             
              ("Ghaziabad", "Ghaziabad Raj Nagar", 28.6670, 77.4440, "police_station"),
-             ("Ghaziabad", "Indirapuram", 28.6437, 77.3727, "metro_station"),
              ("Ghaziabad", "Kaushambi Bus Stop", 28.6430, 77.3283, "isolated_park"),
         ]
         data = []
@@ -188,14 +184,20 @@ def load_safety_data():
             "isolated_park":       {"reports": (10, 25), "lighting": (1.0, 3.0), "cctv": (1.0, 2.5), "crowd": (1.0, 2.5), "rating": (2.5, 3.5)},
         }
 
-        for city, name, lat, lon, poi_type in areas:
+        # Generate 150 points total, clustered around the base areas
+        for i in range(1, 151):
+            base_city, base_name, base_lat, base_lon, poi_type = random.choice(base_areas)
             scores = CONTEXT_SCORES.get(poi_type, CONTEXT_SCORES["metro_station"])
+            
+            # Introduce small random offsets for clustering
+            lat_offset = random.uniform(-0.02, 0.02)
+            lon_offset = random.uniform(-0.03, 0.03)
 
             data.append({
-                "area": name,
-                "city": city,
-                "latitude": lat,
-                "longitude": lon,
+                "area": f"{base_name} Zone {i}",
+                "city": base_city,
+                "latitude": base_lat + lat_offset,
+                "longitude": base_lon + lon_offset,
                 "type": poi_type, 
                 "reports": random.randint(*scores["reports"]), 
                 "lighting": round(random.uniform(*scores["lighting"]), 1),
@@ -215,15 +217,22 @@ def load_safety_data():
 safety_data = load_safety_data()
 
 # ------------------------------------------------------------
-# CORE AI AND HELPER FUNCTIONS 
+# CORE AI AND HELPER FUNCTIONS (KD-Tree Integration)
 # ------------------------------------------------------------
+
+@st.cache_resource
+def initialize_kdtree(df):
+    """Initializes the KD-Tree for spatial indexing on load."""
+    return KDTree(df[['latitude', 'longitude']])
+
+safety_kdtree = initialize_kdtree(safety_data)
+
 
 def get_coordinates(place):
     """(3.2) Robust Geocoding with City Center Fallback (Used only for map clicks)"""
     global city_choice 
     geolocator = Nominatim(user_agent="safe_path_ai")
     
-    # Attempt to geocode specific place
     try:
         location = geolocator.geocode(f"{place}, {city_choice}", timeout=10) 
         if location:
@@ -231,7 +240,6 @@ def get_coordinates(place):
     except:
         pass 
 
-    # Fallback to City Center (3.2)
     try:
         city_location = geolocator.geocode(city_choice, timeout=10)
         if city_location:
@@ -240,7 +248,6 @@ def get_coordinates(place):
     except:
         pass 
 
-    # Absolute Fallback (if the city itself fails)
     st.sidebar.error("Geocoding failed entirely. Cannot set location.")
     return None
 
@@ -250,29 +257,31 @@ def get_current_location():
     return tuple(g.latlng) if g.latlng else None
 
 def nearest_area(lat, lon):
-    data_copy = safety_data.copy()
-    data_copy["dist"] = ((data_copy["latitude"] - lat)**2 + (data_copy["longitude"] - lon)**2)**0.5
+    """Finds the nearest area using KD-Tree for O(log n) efficiency."""
     
-    matched_area = data_copy.sort_values("dist").iloc[0]
+    # Use the pre-built KDTree index
+    distance, index = safety_kdtree.query([lat, lon], k=1)
     
+    # Fetch the corresponding row from the main DataFrame
+    matched_area = safety_data.iloc[index].copy()
+    
+    # Apply temporary user report penalty
     if not st.session_state.user_reports.empty:
         report_dist_threshold = 0.01 
-        
         is_affected = False
-        for index, report in st.session_state.user_reports.iterrows():
-            if abs(report['lat'] - matched_area['latitude']) < report_dist_threshold and \
-               abs(report['lon'] - matched_area['longitude']) < report_dist_threshold:
+        for report in st.session_state.user_reports.itertuples():
+            if abs(report.lat - matched_area['latitude']) < report_dist_threshold and \
+               abs(report.lon - matched_area['longitude']) < report_dist_threshold:
                 is_affected = True
                 break
         
         if is_affected:
-            # Amplified Penalty: Drop user rating and reports heavily
-            matched_area['user_rating'] = 1.0 # Set rating to lowest possible
-            matched_area['reports'] += 50   # Add extreme penalty reports count
+            matched_area['user_rating'] = 1.0 
+            matched_area['reports'] += 50   
         
         return matched_area 
 
-    return data_copy.sort_values("dist").iloc[0]
+    return matched_area 
 
 def calculate_route_safety_score(route_coords):
     if not route_coords:
@@ -374,6 +383,21 @@ def get_routes(start_coords, end_coords):
     except Exception as e:
         st.error(f"Route calculation failed: {e}")
         return [start_coords, end_coords], [start_coords, end_coords], 50, 50
+
+def suggest_transport(safest_score, hour):
+    """Suggests a mode of transport based on the safety score and time of day."""
+    is_late_night = (hour >= 22) or (hour <= 5) # 10 PM to 5 AM
+
+    if safest_score >= 85:
+        return "🚶 Walk/🚲 Cycle", "The route is highly rated and well-lit. Walking or cycling is recommended for convenience and environment."
+    elif safest_score >= 70:
+        if is_late_night:
+            return "🚗 Ride-Share/Cab (Tracked)", "The moderate score suggests some risk points during low-crowd hours. Use a reliable, tracked cab/ride-share service for better door-to-door safety and efficiency."
+        else:
+            return "🚇 Transit/Public Transport", "The moderate score is acceptable during the day. Use public transport for cost-effectiveness, high crowd density, and reliable scheduling."
+    else:
+        return "🔒 Private Vehicle/Ride-Share (NO Transit)", "The low safety score requires prioritizing speed and security. Use a private vehicle or a pre-booked, tracked ride-share service (e.g., Uber/Ola) to minimize exposure to high-risk zones."
+
 
 # ------------------------------------------------------------
 # SOS LOGGING & UI HELPERS
@@ -586,6 +610,11 @@ if can_calculate_route or is_partially_set:
         # 1.1 Calculate Routes (This is the blocking step)
         shortest_coords, safest_coords, shortest_score, safest_score = get_routes(start_coords, end_coords)
         
+        # --- NEW ADDITION: Calculate Transport Suggestion ---
+        hour = ist_now.hour
+        transport_suggestion, transport_reason = suggest_transport(safest_score, hour)
+        # --------------------------------------------------
+        
         # 1.2 Hide Loader after routes are calculated
         loading_placeholder.empty()
 
@@ -747,7 +776,7 @@ if can_calculate_route or is_partially_set:
             st.markdown("---")
             with st.expander("Final Recommendation: Detailed Rationale", expanded=True):
                 
-                # Determine which route is recommended
+                # ROUTE SELECTION RATIONALE
                 if safest_score > shortest_score + 5:
                     recommended_route = "Safest Route (Red Line)"
                     score_diff = safest_score - shortest_score
@@ -761,6 +790,12 @@ if can_calculate_route or is_partially_set:
                     st.warning("Caution: Both routes carry significant risk.")
                     st.markdown('<p style="color:white; font-size: small;">Rationale: Both available routes contain **high-risk segments** (indicated by red blocks in the risk profile). Travel during peak hours or consider alternative transport.</p>', unsafe_allow_html=True)
 
+                # --- TRANSPORT SUGGESTION (NEW BLOCK) ---
+                st.markdown("---")
+                transport_suggestion, transport_reason = suggest_transport(safest_score, ist_now.hour)
+                st.markdown(f"#### 🚌 Suggested Mode of Transport: **{transport_suggestion}**")
+                st.markdown(f'<p style="color:#FFC107; font-size: small;">*Reasoning: {transport_reason}*</p>', unsafe_allow_html=True)
+                # ----------------------------------------
             
             # Button logic to enter simulation mode
             st.markdown("---")
@@ -876,6 +911,7 @@ with st.expander("About ROSA & Upcoming Features"):
 * **Contextual Data:** Safety scores are influenced by Point-of-Interest (POI) type (e.g., Police Station vs. Isolated Park).
 * **Dynamic Scoring:** Safety scores change based on the current **time of day**, simulating live crowd data.
 * **User Feedback Loop:** User-submitted hazard reports immediately penalize nearby route segments.
+* **Suggested Transport:** Recommends the safest mode of transport based on the final route score and time.
 * **Simulated Tracking:** Journey mode with timed safety check-ins.
 * **Dual Routing:** Compares shortest path vs. Safest Path.
 """)
