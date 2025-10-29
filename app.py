@@ -460,7 +460,7 @@ def simulate_safe_journey(shortest_coords, safest_coords, shortest_score, safest
                 st.markdown(f'<p style="color:#FFC107; font-weight:bold;">Nearing: {nearest["area"]}</p>', unsafe_allow_html=True)
                 st.markdown(f'<p style="font-size: small;">Risk Score: {calculate_route_safety_score([ (lat, lon) ])}/100</p>', unsafe_allow_html=True)
         
-        time.sleep(0.1) 
+        time.sleep(0.6) 
 
     progress_bar.empty()
     st.success("Journey Complete! You have arrived safely.")
