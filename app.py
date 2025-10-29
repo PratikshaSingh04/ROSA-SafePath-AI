@@ -253,14 +253,22 @@ def nearest_area(lat, lon):
     data_copy = safety_data.copy()
     data_copy["dist"] = ((data_copy["latitude"] - lat)**2 + (data_copy["longitude"] - lon)**2)**0.5
     
+    matched_area = data_copy.sort_values("dist").iloc[0]
+    
     if not st.session_state.user_reports.empty:
-        matched_area = data_copy.sort_values("dist").iloc[0]
         report_dist_threshold = 0.01 
         
+        is_affected = False
         for index, report in st.session_state.user_reports.iterrows():
             if abs(report['lat'] - matched_area['latitude']) < report_dist_threshold and \
                abs(report['lon'] - matched_area['longitude']) < report_dist_threshold:
-                matched_area['reports'] += 5
+                is_affected = True
+                break
+        
+        if is_affected:
+            # Amplified Penalty: Drop user rating and reports heavily
+            matched_area['user_rating'] = 1.0 # Set rating to lowest possible
+            matched_area['reports'] += 50   # Add extreme penalty reports count
         
         return matched_area 
 
