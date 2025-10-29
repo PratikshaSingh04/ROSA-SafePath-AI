@@ -743,17 +743,24 @@ if can_calculate_route or is_partially_set:
                 safest_spark = get_risk_profile_sparkline(safest_coords)
                 col_profile.markdown(f"**Safest Path:** <span style='font-size: 1.2em;'>{safest_spark}</span>", unsafe_allow_html=True)
 
-            # 5. Final Recommendation and Advice
+            # 5. Final Recommendation and Advice (Modified for detailed rationale)
             st.markdown("---")
-            with st.expander("Final Recommendation", expanded=True):
-                st.markdown(f"#### Overall Safety Advice (Time-Aware)")
+            with st.expander("Final Recommendation: Detailed Rationale", expanded=True):
                 
-                if safest_score > shortest_score + 5: 
-                    st.success("Recommendation: Take the Safest Route (Red Line). It avoids higher-risk zones and scores significantly better.")
-                elif shortest_score >= 80 and safest_score < shortest_score + 5:
-                    st.info("Recommendation: Either route is good. Both are rated relatively safe. You can choose the shorter path (Grey Line).")
+                # Determine which route is recommended
+                if safest_score > shortest_score + 5:
+                    recommended_route = "Safest Route (Red Line)"
+                    score_diff = safest_score - shortest_score
+                    safety_reason = f"The algorithm selected the Safest Route, which bypassed areas with **high reported incidents** and prioritized segments with better **CCTV coverage** and **street lighting**. This path offers {score_diff} points higher safety."
+                    st.success(f"Recommendation: Take the {recommended_route}.")
+                    st.markdown(f'<p style="color:white; font-size: small;">Rationale: {safety_reason}</p>', unsafe_allow_html=True)
+                elif shortest_score >= 80:
+                    st.info("Recommendation: Either route is acceptable.")
+                    st.markdown('<p style="color:white; font-size: small;">Rationale: Both paths offer a high safety score (80+). The short route is likely only marginally less safe but saves travel time.</p>', unsafe_allow_html=True)
                 else:
-                    st.warning("Caution: Both routes have areas of concern, especially given the current time.")
+                    st.warning("Caution: Both routes carry significant risk.")
+                    st.markdown('<p style="color:white; font-size: small;">Rationale: Both available routes contain **high-risk segments** (indicated by red blocks in the risk profile). Travel during peak hours or consider alternative transport.</p>', unsafe_allow_html=True)
+
             
             # Button logic to enter simulation mode
             st.markdown("---")
@@ -781,6 +788,7 @@ with st.expander("Report a Local Hazard (User Feedback System)"):
             new_report = pd.DataFrame([{'lat': start_coords[0], 'lon': start_coords[1], 'hazard': hazard, 'timestamp': datetime.now()}])
             st.session_state.user_reports = pd.concat([st.session_state.user_reports, new_report], ignore_index=True)
             st.success(f"Report logged near Start Location. Recalculate route to see safety score changes!")
+            st.rerun()
         else:
             st.error("Please select a valid start location first.")
 
@@ -789,6 +797,7 @@ with st.expander("Report a Local Hazard (User Feedback System)"):
             new_report = pd.DataFrame([{'lat': end_coords[0], 'lon': end_coords[1], 'hazard': hazard, 'timestamp': datetime.now()}])
             st.session_state.user_reports = pd.concat([st.session_state.user_reports, new_report], ignore_index=True)
             st.success(f"Report logged near Destination. Recalculate route to see safety score changes!")
+            st.rerun()
         else:
             st.error("Please select a valid destination first.")
 
