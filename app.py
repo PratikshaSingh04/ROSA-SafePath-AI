@@ -388,9 +388,9 @@ def save_sos_alert(name, number, location_text, coords):
         
 def display_colored_metric(col, title, score, help_text):
     """Displays st.metric with dynamically colored value based on safety score."""
-    if score >= 85: color = "#4CAF50"
-    elif score >= 70: color = "#FFC107"
-    else: color = "#C2185B"
+    if score >= 85: color = "#4CAF50" # Green
+    elif score >= 70: color = "#FFC107" # Yellow
+    else: color = "#C2185B" # Red
     
     st.markdown(
         f"""
@@ -443,10 +443,11 @@ def simulate_safe_journey(shortest_coords, safest_coords, shortest_score, safest
     for i in range(total_steps + 1):
         
         if i == 50:
-            with check_in_button_container:
+            with col_checkin:
                 if st.button("PROCEED: Confirm Safe", type="primary", key="check_in_dashboard"):
                     st.toast("Safety confirmed. Continuing route.")
-                    check_in_button_container.empty()
+                    # Clear the button container after click
+                    col_checkin.empty() 
                     
         progress_bar.progress(i, text=f"Progress: {i}% complete.")
         
